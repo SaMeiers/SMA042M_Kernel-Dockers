@@ -24,15 +24,17 @@ jobs:
 
     - name: Download clang-r383902
       run: |
-        git clone --depth=1 --filter=blob:none --sparse \
-          https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86 clang-tmp
-        cd clang-tmp
-        git sparse-checkout set clang-r383902
-        cd ..
-        mkdir -p toolchains
-        mv clang-tmp/clang-r383902 toolchains/clang-r383902
+        git clone --branch 10.0 --depth=1 \
+          https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-6443078 clang-tmp
+        mkdir -p toolchains/clang-r383902
+        mv clang-tmp/* toolchains/clang-r383902/
         rm -rf clang-tmp
         chmod +x toolchains/clang-r383902/bin/*
+        if [ ! -f toolchains/clang-r383902/bin/clang ]; then
+          echo "ERROR: clang binary not found after extraction. Repo layout:"
+          find toolchains/clang-r383902 -maxdepth 2
+          exit 1
+        fi
 
     - name: Download GCC 4.9 aarch64 toolchain
       run: |
