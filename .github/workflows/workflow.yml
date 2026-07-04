@@ -1,1 +1,64 @@
+name: Kernel Compilation
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release Tag'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Set up build environment
+      run: |
+        sudo apt update -y
+        sudo apt install -y libncurses5-dev build-essential bc flex bison libssl-dev
+
+    - name: Download clang-r383902
+      run: |
+        mkdir -p toolchains/clang-r383902
+        cd toolchains/clang-r383902
+        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/android-11.0.0_r28/clang-r383902.tar.gz
+        tar -xzf clang-r383902.tar.gz
+        rm clang-r383902.tar.gz
+
+    - name: Download GCC 4.9 aarch64 toolchain
+      run: |
+        git clone --depth=1 -b lineage-19.1 \
+          https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 \
+          toolchains/aarch64-linux-android-4.9
+
+    - name: Place custom.config
+      run: |
+        cp custom.config arch/arm64/configs/custom.config
+
+    - name: Compile Kernel
+      run: |
+        chmod +x build_kernel.sh
+        bash build_kernel.sh
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SM-A042M-Magisk-${{ github.event.inputs.tag }}
+        path: build/*.tar
+
+    - name: Create release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.event.inputs.tag }}
+        name: "SM-A042M-Magisk-${{ github.event.inputs.tag }}"
+        draft: false
+        prerelease: false
+        token: ${{ secrets.TOKEN }}
+        artifacts: "build/*.tar"
+        body: "Commit SHA: ${{ github.sha }}"
 
