@@ -24,17 +24,22 @@ jobs:
 
     - name: Download clang-r383902
       run: |
-        mkdir -p toolchains/clang-r383902
-        cd toolchains/clang-r383902
-        wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/android-11.0.0_r28/clang-r383902.tar.gz
-        tar -xzf clang-r383902.tar.gz
-        rm clang-r383902.tar.gz
+        git clone --depth=1 --filter=blob:none --sparse \
+          https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86 clang-tmp
+        cd clang-tmp
+        git sparse-checkout set clang-r383902
+        cd ..
+        mkdir -p toolchains
+        mv clang-tmp/clang-r383902 toolchains/clang-r383902
+        rm -rf clang-tmp
+        chmod +x toolchains/clang-r383902/bin/*
 
     - name: Download GCC 4.9 aarch64 toolchain
       run: |
         git clone --depth=1 -b lineage-19.1 \
           https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 \
           toolchains/aarch64-linux-android-4.9
+        chmod +x toolchains/aarch64-linux-android-4.9/bin/*
 
     - name: Place custom.config
       run: |
@@ -61,4 +66,3 @@ jobs:
         token: ${{ secrets.TOKEN }}
         artifacts: "build/*.tar"
         body: "Commit SHA: ${{ github.sha }}"
-
