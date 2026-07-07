@@ -6,6 +6,10 @@ on:
       tag:
         description: 'Release Tag'
         required: true
+      baseline:
+        description: 'Build baseline (no custom.config) — use to validate pipeline first'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -19,15 +23,30 @@ jobs:
 
     - name: Set up build environment
       run: |
-        sudo apt update -y
-        sudo apt install -y libncurses5-dev build-essential bc flex bison libssl-dev
+        sudo apt-get update -y
+        sudo apt-get install -y \
+          build-essential \
+          bc \
+          bison \
+          cpio \
+          flex \
+          libelf-dev \
+          libncurses5-dev \
+          libssl-dev \
+          lz4 \
+          openssl \
+          python3 \
+          zip
 
     - name: Download clang-r383902
       run: |
         git clone --branch 10.0 --depth=1 \
           https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-6443078 clang-tmp
         mkdir -p toolchains/clang-r383902
+        # Use find+mv to also move hidden dotfiles (gitignore, etc.)
+        shopt -s dotglob
         mv clang-tmp/* toolchains/clang-r383902/
+        shopt -u dotglob
         rm -rf clang-tmp
         chmod +x toolchains/clang-r383902/bin/*
         if [ ! -f toolchains/clang-r383902/bin/clang ]; then
@@ -35,6 +54,8 @@ jobs:
           find toolchains/clang-r383902 -maxdepth 2
           exit 1
         fi
+        echo "clang version:"
+        toolchains/clang-r383902/bin/clang --version | head -2
 
     - name: Download GCC 4.9 aarch64 toolchain
       run: |
@@ -43,20 +64,35 @@ jobs:
           toolchains/aarch64-linux-android-4.9
         chmod +x toolchains/aarch64-linux-android-4.9/bin/*
 
-    - name: Place custom.config
+    - name: Place custom.config (skip if baseline build)
       run: |
-        cp custom.config arch/arm64/configs/custom.config
+        if [ "${{ github.event.inputs.baseline }}" = "true" ]; then
+          echo "[i] Baseline build requested — moving custom.config aside"
+          if [ -f custom.config ]; then
+            mv custom.config custom.config.disabled
+          fi
+        else
+          cp custom.config arch/arm64/configs/custom.config
+        fi
 
     - name: Compile Kernel
       run: |
         chmod +x build_kernel.sh
         bash build_kernel.sh
 
-    - name: Upload Artifacts
+    - name: Upload boot.tar artifact
       uses: actions/upload-artifact@v4
       with:
         name: SM-A042M-Magisk-${{ github.event.inputs.tag }}
         path: build/*.tar
+        if-no-files-found: error
+
+    - name: Upload .config artifact (for debugging)
+      uses: actions/upload-artifact@v4
+      with:
+        name: dot-config-${{ github.event.inputs.tag }}
+        path: build/dot-config-final
+        if-no-files-found: warn
 
     - name: Create release
       uses: ncipollo/release-action@v1
@@ -67,4 +103,14 @@ jobs:
         prerelease: false
         token: ${{ secrets.TOKEN }}
         artifacts: "build/*.tar"
-        body: "Commit SHA: ${{ github.sha }}"
+        body: |
+          Commit SHA: ${{ github.sha }}
+          Baseline build: ${{ github.event.inputs.baseline }}
+
+          ## Install
+          1. Flash `SM-A042M-Magisk.tar` via Odin (AP slot, Nand Erase OFF)
+          2. Reboot
+          3. If bootloop, flash back stock boot.img and check `/sys/fs/pstore/`
+
+          ## Debugging
+          See the `dot-config-*` artifact for the exact .config used.
